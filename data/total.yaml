@@ -1,0 +1,15 @@
+#mydata
+#train/val/test set
+train: /home/gli/workspace_DL/jtt/yolov5/company_data/train.txt
+val: /home/gli/workspace_DL/jtt/yolov5/company_data/val.txt
+test: /home/gli/workspace_DL/jtt/yolov5/test/test.txt
+
+#train: /home/gli/workspace_DL/jtt/yolov5/company_data/train.txt
+#val: /home/gli/workspace_DL/jtt/yolov5/company_data/val.txt
+#test: /home/gli/workspace_DL/jtt/yolov5/company_data/test.txt
+
+#number of class
+nc: 1
+
+#class name
+names: ['others']

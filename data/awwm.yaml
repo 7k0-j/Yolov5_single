@@ -1,0 +1,11 @@
+#mydata
+#train/val/test set
+train: /media/data/MPBdata/HWTMLB6/image_path/train.txt
+val: /media/data/MPBdata/HWTMLB6/image_path/val.txt
+test: /media/data/MPBdata/HWTMLB6/image_path/test.txt
+
+#number of class
+nc: 1
+
+#class name
+names: ['others']

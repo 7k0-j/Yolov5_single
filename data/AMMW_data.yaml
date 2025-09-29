@@ -1,0 +1,11 @@
+#mydata
+#train/val/test set
+train: /home/gli/workspace_DL/jtt/yolov5/AMMW_data/train.txt
+val: /home/gli/workspace_DL/jtt/yolov5/AMMW_data/val.txt
+test: /home/gli/workspace_DL/jtt/yolov5/AMMW_data/test.txt
+
+#number of class
+nc: 6
+
+#class name
+names: ['gun','knife','liquid','lighter','explosive','others']

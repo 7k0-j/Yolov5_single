@@ -1,0 +1,11 @@
+#mydata
+#train/val/test set
+train: /home/star/WorkSpace/Dataset/dataset2/61372-gs/image_path/train.txt
+val: /home/star/WorkSpace/Dataset/dataset2/61372-gs/image_path/val.txt
+test: /home/star/WorkSpace/Dataset/dataset2/61372-gs/image_path/test.txt
+
+#number of class
+nc: 1
+
+#class name
+names: ['others']

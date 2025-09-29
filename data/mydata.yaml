@@ -1,0 +1,11 @@
+#mydata
+#train/val/test set
+train: /home/gli/workspace_DL/jtt/yolov5/datasets/txt-shuffle/train_shuffle.txt
+val: /home/gli/workspace_DL/jtt/yolov5/datasets/txt-shuffle/val_shuffle.txt
+test: /home/gli/workspace_DL/jtt/yolov5/datasets/txt-shuffle/test_shuffle.txt
+
+#number of class
+nc: 1
+
+#class name
+names: ['others']
