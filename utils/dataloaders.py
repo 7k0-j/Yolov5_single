@@ -12,6 +12,7 @@ import os
 import random
 import shutil
 import time
+import logging
 from itertools import repeat
 from multiprocessing.pool import Pool, ThreadPool
 from pathlib import Path
@@ -245,7 +246,7 @@ class LoadImages:
         else:
             # Read image
             self.count += 1
-            img0 = cv2.imread(path, 1)  # BGR
+            img0 = cv2.imread(path, 0)  # BGR
             assert img0 is not None, f'Image Not Found {path}'
             s = f'image {self.count}/{self.nf} {path}: '
 
@@ -253,7 +254,8 @@ class LoadImages:
         img = letterbox(img0, self.img_size, stride=self.stride, auto=self.auto)[0]
 
         # Convert
-        img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+        #img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+        img = img.reshape(1, img.shape[0], img.shape[1])
         img = np.ascontiguousarray(img)
 
         return path, img, img0, self.cap, s
@@ -301,6 +303,7 @@ class LoadWebcam:  # for inference
 
         # Convert
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+        #img = img.reshape(1, img.shape[0], img.shape[1])
         img = np.ascontiguousarray(img)
 
         return img_path, img, img0, None, s
@@ -601,15 +604,20 @@ class LoadImagesAndLabels(Dataset):
         if mosaic:
             # Load mosaic
             img, labels = self.load_mosaic(index)
+                # -------------------------- 新增：验证mosaic增强后形状 --------------------------
+            #print(f"Mosaic增强后形状: {img.shape}")  # 应为 (H, W)（单通道）
             shapes = None
 
             # MixUp augmentation
             if random.random() < hyp['mixup']:
                 img, labels = mixup(img, labels, *self.load_mosaic(random.randint(0, self.n - 1)))
+                 # -------------------------- 新增：验证mixup增强后形状 --------------------------
+                #print(f"Mixup增强后形状: {img.shape}")  # 应为 (H, W)（单通道）
 
         else:
             # Load image
             img, (h0, w0), (h, w) = self.load_image(index)
+            #print(f"图像读取后形状 (index={index}): {img.shape}")  # 打印单通道形状
 
             # Letterbox
             shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
@@ -637,6 +645,8 @@ class LoadImagesAndLabels(Dataset):
             # Albumentations
             img, labels = self.albumentations(img, labels)
             nl = len(labels)  # update after albumentations
+            # 新增：验证Albumentations增强后的通道数
+            #print(f"Albumentations增强后形状: {img.shape}")  # 应为 (H, W) 或 (H, W, 1)
 
             # HSV color-space
             #augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
@@ -662,34 +672,82 @@ class LoadImagesAndLabels(Dataset):
             labels_out[:, 1:] = torch.from_numpy(labels)
 
         # Convert
-        img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+        img = img.reshape(1, img.shape[0], img.shape[1])
+        #img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         #img = img.reshape(1, img.shape[0], img.shape[1])  # HWC to CHW, BGR to RGB
         img = np.ascontiguousarray(img)
 
-        return torch.from_numpy(img), labels_out, self.im_files[index], shapes
+        return torch.from_numpy(img), labels_out, self.im_files[index], shapes#源代码存在
+
 
     def load_image(self, i):
-        # Loads 1 image from dataset index 'i', returns (im, original hw, resized hw)
-        im, f, fn = self.ims[i], self.im_files[i], self.npy_files[i],
-        if im is None:  # not cached in RAM
-            if fn.exists():  # load npy
-                im = np.load(fn)
-            else:  # read image
-                im = cv2.imread(f, 1)  # BGR
-                assert im is not None, f'Image Not Found {f}'
-            h0, w0 = im.shape[:2]  # orig hw
-            r = self.img_size / max(h0, w0)  # ratio
-            if r != 1:  # if sizes are not equal
+        im, f, fn = self.ims[i], self.im_files[i], self.npy_files[i]
+        if im is None:  # 图像未缓存在RAM中
+            if fn.exists():  # 尝试加载npy文件
+                try:
+                    im = np.load(fn)
+                except Exception as e:
+                    pass
+ 
+            if im is None:  # npy文件加载失败或不存在，尝试读取原始图像
+                try:
+                    im = cv2.imread(f, cv2.IMREAD_GRAYSCALE)  # 使用cv2.IMREAD_COLOR代替1以提高代码可读性
+                    if im is None:
+                        # 图像读取失败，尝试从备份路径恢复
+                        new_f = self.handle_missing_image(f)
+                        # 使用新的文件路径重新尝试读取图像
+                        im = cv2.imread(new_f, cv2.IMREAD_GRAYSCALE)
+                        if im is None:
+                            # 如果仍然失败，抛出异常
+                            raise ValueError(f"Image still not found after handling: {new_f}")
+                except Exception as e:
+                    # 处理图像读取过程中的其他异常
+                    raise ValueError(f"Error reading image {f}: {e}")
+ 
+            # 接下来的代码假设im现在是一个有效的图像
+            h0, w0 = im.shape[:2]  # 原始图像的高度和宽度
+            r = self.img_size / max(h0, w0)  # 计算缩放比例
+            if r != 1:  # 如果尺寸不匹配
                 interp = cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA
                 im = cv2.resize(im, (int(w0 * r), int(h0 * r)), interpolation=interp)
-            return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
-        return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized
+ 
+            # 返回处理后的图像、原始尺寸和调整后的尺寸
+            return im, (h0, w0), im.shape[:2]
+ 
+        # 如果图像已缓存在RAM中，则返回缓存的图像和尺寸
+        return self.ims[i], self.im_hw0[i], self.im_hw[i]
+ 
+    def handle_missing_image(self, file_path):
+        # 获取文件名和目录
+        dir_path, file_name = os.path.split(file_path)
+        file_name_without_ext, ext = os.path.splitext(file_name)
+ 
+        # 假设备用文件夹路径为backup_images_folder
+        backup_images_folder = "/mnt/jy01/HWT-train/beifen/images/"  # 替换为实际的备份文件夹路径
+        backup_file_path = os.path.join(backup_images_folder, f"{file_name_without_ext}.png")
+ 
+        # 检查备份文件夹中是否存在同名的文件
+        if os.path.exists(backup_file_path):
+            # 如果原始文件存在，则删除它
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                print(f"Deleted original file: {file_path}")
+ 
+            # 复制备份文件夹中的PNG文件到目标位置
+            shutil.copy(backup_file_path, dir_path)
+            print(f"Replaced {file_path} with {backup_file_path}")
+ 
+            # 返回新的文件路径
+            return os.path.join(dir_path, f"{file_name_without_ext}.png")
+        else:
+            # 如果没有找到备份文件，则抛出异常
+            raise ValueError(f"Backup file not found for {file_name}")    
 
     def cache_images_to_disk(self, i):
         # Saves an image as an *.npy file for faster loading
         f = self.npy_files[i]
         if not f.exists():
-            np.save(f.as_posix(), cv2.imread(self.im_files[i]), 1)
+            np.save(f.as_posix(), cv2.imread(self.im_files[i], cv2.IMREAD_GRAYSCALE), 0)
 
     def load_mosaic(self, index):
         # YOLOv5 4-mosaic loader. Loads 1 image + 3 random images into a 4-image mosaic
@@ -703,7 +761,7 @@ class LoadImagesAndLabels(Dataset):
 
             # place img in img4
             if i == 0:  # top left
-                img4 = np.full((s * 2, s * 2, img.shape[2]), 114, dtype=np.uint8)
+                img4 = np.full((s * 2, s * 2), 114, dtype=np.uint8)
                 #img4 = np.full((s * 2, s * 2), 114, dtype=np.uint8)  # base image with 4 tiles
                 x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
@@ -762,7 +820,8 @@ class LoadImagesAndLabels(Dataset):
 
             # place img in img9
             if i == 0:  # center
-                img9 = np.full((s * 3, s * 3, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
+                #img9 = np.full((s * 3, s * 3, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
+                img9 = np.full((s * 3, s * 3), 114, dtype=np.uint8)
                 h0, w0 = h, w
                 c = s, s, s + w, s + h  # xmin, ymin, xmax, ymax (base) coordinates
             elif i == 1:  # top
@@ -879,7 +938,7 @@ def extract_boxes(path=DATASETS_DIR / 'coco128'):  # from utils.dataloaders impo
     for im_file in tqdm(files, total=n):
         if im_file.suffix[1:] in IMG_FORMATS:
             # image
-            im = cv2.imread(str(im_file), 1)[..., ::-1]  # BGR to RGB
+            im = cv2.imread(str(im_file), 0) # BGR to RGB
             h, w = im.shape[:2]
 
             # labels
@@ -1040,7 +1099,7 @@ class HUBDatasetStats():
             im.save(f_new, 'JPEG', quality=50, optimize=True)  # save
         except Exception as e:  # use OpenCV
             print(f'WARNING: HUB ops PIL failure {f}: {e}')
-            im = cv2.imread(f, 1)
+            im = cv2.imread(f, 0)
             im_height, im_width = im.shape[:2]
             r = max_dim / max(im_height, im_width)  # ratio
             if r < 1.0:  # image too large
