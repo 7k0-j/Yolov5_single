@@ -1,4 +1,4 @@
-# YOLOv5 🚀 by Ultralytics, GPL-3.0 license
+# YOLOv5 馃殌 by Ultralytics, GPL-3.0 license
 """
 Image augmentation functions
 """
@@ -117,7 +117,16 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
         im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+     # -------------------------- 核心修改：适配单通道 --------------------------
+    # 判断图像通道数：单通道（[H,W]或[H,W,1]）用单值填充，3通道用原元组填充
+    if len(im.shape) == 2 or (len(im.shape) == 3 and im.shape[2] == 1):
+        # 单通道：填充色取color的第一个值（如114），避免通道不匹配
+        im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color[0])
+    else:
+        # 3通道：保留原逻辑（用(114,114,114)填充）
+        im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+     # 临时添加到letterbox函数末尾
+    #print(f"letterbox: {im.shape}")  # 应为 (new_H, new_W) 或 (new_H, new_W, 1)
     return im, ratio, (dw, dh)
 
 
