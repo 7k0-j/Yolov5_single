@@ -1,4 +1,4 @@
-# YOLOv5 🚀 by Ultralytics, GPL-3.0 license
+# YOLOv5 馃殌 by Ultralytics, GPL-3.0 license
 """
 Common modules
 """
@@ -691,8 +691,8 @@ class AutoShape(nn.Module):
             f = f'image{i}'  # filename
             if isinstance(im, (str, Path)):  # filename or uri
                 im, f = Image.open(requests.get(im, stream=True).raw if str(im).startswith('http') else im), im
-                #if im.mode != 'L':
-                #    im = im.convert('L')
+                if im.mode != 'L':
+                    im = im.convert('L')
                 im = np.asarray(exif_transpose(im))
             elif isinstance(im, Image.Image):  # PIL Image
                 im, f = np.asarray(exif_transpose(im)), getattr(im, 'filename', f) or f
@@ -873,7 +873,7 @@ class SpatialAttention(nn.Module):
         super(SpatialAttention, self).__init__()
         assert kernel_size in (3, 7), 'kernel size must be 3 or 7'
         padding = 3 if kernel_size == 7 else 1
-        # (特征图的大小-算子的size+2*padding)/步长+1
+        # (鐗瑰緛鍥剧殑澶у皬-绠楀瓙鐨剆ize+2*padding)/姝ラ暱+1
         self.conv = nn.Conv2d(2, 1, kernel_size, padding=padding, bias=False)
         self.sigmoid = nn.Sigmoid()
 
